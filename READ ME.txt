@@ -1,0 +1,152 @@
+BigRunPulse Engine Documentation
+BigRunPulse is a lightweight, modular 2D game engine framework built on top of LÖVE. It features a component-based architecture for physics, input handling, and window management.
+Table of Contents
+
+    BigRun (Main Entry)
+    Engine2D (Core & Rendering)
+    Physics (Dynamics & Collisions)
+    Window (Display Management)
+    Input (User Interaction)
+    Diagnostic (Monitoring)
+
+1. BigRun (Main Entry)
+The gateway module that aliases all sub-components.
+
+    BigRun.spawn(x, y, size, shape): Alias for Engine2D.spawnFrame.
+    BigRun.print(text, x, y, r, g, b, a): Alias for Engine2D.print.
+
+2. Engine2D (Core & Rendering)
+Handles the lifecycle, transformation, and drawing of game entities.
+Global Methods
+
+    Engine2D.spawnFrame(x, y, size, shape): Creates and tracks a new entity. Returns the entity object.
+    Engine2D.updateAll(dt): Updates physics, drag, and velocity for all active entities. Handles automatic memory cleanup for inactive entities.
+    Engine2D.drawAll(): Renders all tracked entities to the screen.
+
+Entity Instance Methods
+
+    :pos(x, y): Sets the absolute X and Y coordinates.
+    :rotate(angle): Increments the rotation by the given angle.
+    :setColor(r, g, b, a): Sets the rendering color (0.0 to 1.0).
+    :scale(factor): Multiplies the current size by the factor.
+    :destroy(): Marks the entity as inactive (it will be removed in the next update).
+    :collidesWith(other): Returns true if this entity's AABB (Axis-Aligned Bounding Box) overlaps with the other entity.
+
+3. Physics (Dynamics & Collisions)
+Extends entities with Newtonian physical behaviors.
+Kinematics
+
+    Physics:giveGravity(vector, strength): Sets constant acceleration (e.g., {x=0, y=9.8}).
+    Physics:giveVelocity(vector, useMass): Applies an instantaneous force. If useMass is true, velocity change is inversely proportional to mass.
+    Physics:setPhysics(drag, mass): Sets the resistance to movement (drag) and the weight (mass).
+    Physics:stop(): Instantly cancels all velocity.
+
+Global Physics Logic
+
+    Physics.resolveCollisions(entities): Static method to process elastic collisions. Handles momentum transfer and "anti-stuck" positional correction.
+    Physics.distortionGravity(entity, target, strength): Pulls (positive strength) or pushes (negative strength) an entity toward a specific point. Frame-rate independent.
+
+4. Window (Display Management)
+Wraps LÖVE windowing functions for ease of use.
+
+    Window.setup(width, height, settings): Initializes the window. Forced to fullscreentype = "desktop" for high-quality scaling.
+    Window.setVSync(enable): Toggles vertical synchronization (1 for on, 0 for off).
+    Window.setBackground(r, g, b): Clears the screen with the specified color.
+    Window.getArea(): Returns width, height.
+    Window.exit(): Closes the application.
+
+5. Input (User Interaction)
+Simplified polling for keyboard and mouse states.
+
+    Input.getMousePos(): Returns x, y of the cursor.
+    Input.isKeyDown(key): Returns true if the specific key is held.
+    Input.isMouseDown(button): Returns true if the specific mouse button (1=Left, 2=Right) is held.
+
+6. Diagnostic (Monitoring)
+Tools for performance profiling and system information.
+
+    Diagnostic.getFps(): Returns current Frames Per Second.
+    Diagnostic.getMemoryUsage(): Returns Lua memory usage in Megabytes.
+    Diagnostic.draw(x, y): Overlays a debug string (FPS, RAM, and OS) at the specified coordinates.
+
+Quick Start Example (2026)
+
+local brp = require("BigRunPulse.BigRun")
+
+function love.load()
+    brp.Window.setup(800, 600, {resizable = true})
+    brp.Window.setTitle("BigRunPulse Physics Test - 2026")
+end
+
+function love.update(dt)
+    -- 1. Spawn logic (using brp.Input and brp.spawn alias)
+    if brp.Input.isKeyDown("g") then
+        local w, h = brp.Window.getArea()
+        local centerX, centerY = w/2, h/2
+        
+        -- Random spawn position at screen edges
+        local rx = love.math.random(0, 1) == 0 and 0 or w
+        local ry = love.math.random(0, h)
+
+        -- Create ball via Engine2D alias
+        local ball = brp.spawn(rx, ry, 20, "circle")
+        ball:setColor(love.math.random(), love.math.random(), 1)
+        
+        -- Apply physical properties from Physics module
+        -- Note: Ensure Engine2D objects have access to Physics methods 
+        -- (usually via setmetatable or direct injection)
+        brp.Physics.setPhysics(ball, 0.3, 1) 
+        
+        -- Calculate direction to center
+        local dx, dy = centerX - rx, centerY - ry
+        local dist = math.sqrt(dx*dx + dy*dy)
+        
+        if dist > 0 then
+            local speed = 400
+            brp.Physics.giveVelocity(ball, {x = (dx/dist)*speed, y = (dy/dist)*speed}, false)
+        end
+    end
+
+    -- main.lua
+    local mx, my = brp.Input.getMousePos()
+        local mouseTarget = {x = mx, y = my}
+    -- Distortion Gravity Logic
+    if brp.Input.isMouseDown(1) then -- 1 is Left Mouse Button
+        -- Apply pull to all active entities
+        for _, entity in ipairs(brp.Engine2D.entities) do
+            brp.Physics.distortionGravity(entity, mouseTarget, 800)
+        end
+    elseif brp.Input.isMouseDown(2) then 
+        -- Отталкивание (отрицательная сила)
+        for _, entity in ipairs(brp.Engine2D.entities) do
+            brp.Physics.distortionGravity(entity, mouseTarget, -1200) -- Можно чуть сильнее
+        end
+    end
+
+
+    -- 2. Physics Resolution
+    -- Passing Engine2D.entities to our Physics resolver
+    brp.Physics.resolveCollisions(brp.Engine2D.entities)
+
+    -- 3. Update all positions and life cycles
+    brp.Engine2D.updateAll(dt)
+end
+ 
+function love.draw()
+    brp.Window.setBackground(0.1, 0.1, 0.1)
+    
+    -- Draw all entities
+    brp.Engine2D.drawAll()
+    
+    -- Debug Info
+    brp.Diagnostic.draw(10, 30)
+    brp.print("Hold 'G' to blast balls to the center", 10, 30)
+    brp.print("Hold mouse buttons to change gravity", 10, 50)
+end
+
+
+✅ 2026 Developer Tips:
+
+    Safety: Always call BRP.Engine2D.updateAll(dt) to prevent memory leaks from destroyed objects.
+    Resolution: Use BRP.Window.getArea() to dynamically reposition UI elements when the window is resized or enters fullscreen.
+    Performance: The engine is optimized for 2026 high-refresh-rate monitors; ensure all logic remains delta-timed (dt) for smoothness.
